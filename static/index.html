@@ -84,7 +84,6 @@
             letter-spacing: -0.2px;
         }
 
-        /* Model Selector Dropdown */
         .model-select {
             background: #111122;
             color: #b0b0d0;
@@ -179,7 +178,7 @@
         .welcome-text {
             color: var(--text-secondary);
             font-size: 13px;
-            max-width: 300px;
+            max-width: 320px;
             line-height: 1.5;
         }
 
@@ -188,7 +187,7 @@
             grid-template-columns: repeat(2, 1fr);
             gap: 8px;
             width: 100%;
-            max-width: 320px;
+            max-width: 340px;
             margin-top: 10px;
         }
 
@@ -273,6 +272,93 @@
             border: 1px solid var(--border);
             border-bottom-left-radius: 4px;
             color: var(--text-primary);
+        }
+
+        /* Image Display */
+        .generated-image-box {
+            margin-top: 10px;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            background: #000;
+        }
+
+        .generated-image-box img {
+            width: 100%;
+            height: auto;
+            max-height: 380px;
+            object-fit: cover;
+            display: block;
+        }
+
+        .btn-download-media {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            background: var(--accent);
+            color: white;
+            text-decoration: none;
+            padding: 8px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            text-align: center;
+            border-top: 1px solid var(--border);
+            transition: background 0.2s;
+        }
+
+        .btn-download-media:hover {
+            background: #5a50e5;
+        }
+
+        /* File Attachment Card */
+        .file-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 10px;
+            padding: 10px 12px;
+            background: #141426;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            gap: 10px;
+        }
+
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            overflow: hidden;
+        }
+
+        .file-icon {
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+
+        .file-name {
+            font-size: 13px;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .btn-download-file {
+            background: var(--accent);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            text-decoration: none;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        }
+
+        .btn-download-file:hover {
+            background: #5a50e5;
+            transform: scale(1.03);
         }
 
         /* Code Blocks & Copy Button */
@@ -435,7 +521,6 @@
             height: 18px;
         }
 
-        /* Error Toast */
         .toast {
             position: fixed;
             bottom: 75px;
@@ -477,13 +562,13 @@
             <div class="welcome-icon">✦</div>
             <div class="welcome-title">Чем помочь сегодня?</div>
             <div class="welcome-text">
-                Я Google Gemini — ваш персональный ИИ. Задайте вопрос или выберите пример ниже.
+                Пишите обычным языком: я отвечаю на вопросы, генерирую фото, презентации и документы!
             </div>
             <div class="suggestions">
-                <div class="suggestion-chip" onclick="useSuggestion(this)">💡 Идеи для стартапа</div>
+                <div class="suggestion-chip" onclick="useSuggestion(this)">🎨 Нарисуй неоновый спорткар</div>
+                <div class="suggestion-chip" onclick="useSuggestion(this)">📊 Сделай презентацию про космос</div>
+                <div class="suggestion-chip" onclick="useSuggestion(this)">📄 Отчёт в ворде по трендам AI</div>
                 <div class="suggestion-chip" onclick="useSuggestion(this)">🐍 Напиши скрипт на Python</div>
-                <div class="suggestion-chip" onclick="useSuggestion(this)">📝 Напиши пост в соцсети</div>
-                <div class="suggestion-chip" onclick="useSuggestion(this)">🌐 Объясни квантовую физику</div>
             </div>
         </div>
     </div>
@@ -492,7 +577,7 @@
         <div class="input-wrapper">
             <textarea
                 id="messageInput"
-                placeholder="Спросите у Gemini..."
+                placeholder="Спросите или попросите нарисовать..."
                 rows="1"
                 onkeydown="handleKeyDown(event)"
                 oninput="autoResize(this)"
@@ -536,14 +621,12 @@
             haptic('selection');
         }
 
-        // Render Markdown with highlight.js & copy buttons
         function formatMarkdown(text) {
             let escaped = text
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;');
 
-            // Code blocks with syntax highlighting & copy button
             escaped = escaped.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
                 const validLang = lang && hljs.getLanguage(lang) ? lang : 'plaintext';
                 let highlighted = code;
@@ -566,19 +649,13 @@
                 `;
             });
 
-            // Inline code
             escaped = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
-            // Bold
             escaped = escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-            // Italic
             escaped = escaped.replace(/\*(.+?)\*/g, '<em>$1</em>');
-            // Headers
             escaped = escaped.replace(/^### (.+)$/gm, '<h3 style="margin: 8px 0 4px; font-size: 15px;">$1</h3>');
             escaped = escaped.replace(/^## (.+)$/gm, '<h2 style="margin: 10px 0 4px; font-size: 16px;">$1</h2>');
             escaped = escaped.replace(/^# (.+)$/gm, '<h1 style="margin: 12px 0 6px; font-size: 18px;">$1</h1>');
-            // Lists
             escaped = escaped.replace(/^[*-] (.+)$/gm, '<li style="margin-left: 18px;">$1</li>');
-            // Line breaks
             escaped = escaped.replace(/\n/g, '<br>');
 
             return escaped;
@@ -597,7 +674,7 @@
             }
         }
 
-        function addMessage(text, role) {
+        function addMessage(text, role, payload = null) {
             if (welcomeScreen && welcomeScreen.parentNode) {
                 welcomeScreen.remove();
             }
@@ -614,6 +691,37 @@
 
             if (role === 'bot') {
                 bubble.innerHTML = formatMarkdown(text);
+                
+                // If message has generated image
+                if (payload && payload.type === 'image' && payload.media_url) {
+                    bubble.innerHTML += `
+                        <div class="generated-image-box">
+                            <img src="${payload.media_url}" alt="Сгенерированное изображение" loading="lazy">
+                            <a href="${payload.media_url}" download="${payload.filename || 'gemini_art.jpg'}" class="btn-download-media">
+                                💾 Скачать картинку в HD
+                            </a>
+                        </div>
+                    `;
+                }
+
+                // If message has generated document or presentation
+                if (payload && payload.type === 'file' && payload.media_url) {
+                    let fileIcon = '📄';
+                    if (payload.file_type === 'pptx') fileIcon = '📊';
+                    if (payload.file_type === 'pdf') fileIcon = '📑';
+                    
+                    bubble.innerHTML += `
+                        <div class="file-card">
+                            <div class="file-info">
+                                <span class="file-icon">${fileIcon}</span>
+                                <span class="file-name">${payload.filename || 'Файл'}</span>
+                            </div>
+                            <a href="${payload.media_url}" download="${payload.filename || 'document'}" class="btn-download-file">
+                                📥 Скачать
+                            </a>
+                        </div>
+                    `;
+                }
             } else {
                 bubble.textContent = text;
             }
@@ -688,12 +796,6 @@
             sendMessage();
         }
 
-        // Animated typewriter output for smoother reading
-        async function streamTypewriter(bubble, fullText) {
-            bubble.innerHTML = formatMarkdown(fullText);
-            scrollToBottom();
-        }
-
         async function sendMessage() {
             const text = messageInput.value.trim();
             if (!text || isLoading) return;
@@ -728,8 +830,7 @@
                 }
 
                 const data = await res.json();
-                const { bubble } = addMessage('', 'bot');
-                await streamTypewriter(bubble, data.reply);
+                addMessage(data.reply, 'bot', data);
                 haptic('notification');
             } catch (err) {
                 removeTypingIndicator();
@@ -756,12 +857,12 @@
                 <div class="welcome-screen" id="welcomeScreen">
                     <div class="welcome-icon">✦</div>
                     <div class="welcome-title">Чем помочь сегодня?</div>
-                    <div class="welcome-text">Я Google Gemini — ваш персональный ИИ. Задайте вопрос или выберите пример ниже.</div>
+                    <div class="welcome-text">Пишите обычным языком: я отвечаю на вопросы, генерирую фото, презентации и документы!</div>
                     <div class="suggestions">
-                        <div class="suggestion-chip" onclick="useSuggestion(this)">💡 Идеи для стартапа</div>
+                        <div class="suggestion-chip" onclick="useSuggestion(this)">🎨 Нарисуй неоновый спорткар</div>
+                        <div class="suggestion-chip" onclick="useSuggestion(this)">📊 Сделай презентацию про космос</div>
+                        <div class="suggestion-chip" onclick="useSuggestion(this)">📄 Отчёт в ворде по трендам AI</div>
                         <div class="suggestion-chip" onclick="useSuggestion(this)">🐍 Напиши скрипт на Python</div>
-                        <div class="suggestion-chip" onclick="useSuggestion(this)">📝 Напиши пост в соцсети</div>
-                        <div class="suggestion-chip" onclick="useSuggestion(this)">🌐 Объясни квантовую физику</div>
                     </div>
                 </div>
             `;

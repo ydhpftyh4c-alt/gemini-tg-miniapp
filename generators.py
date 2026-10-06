@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import uuid
 import urllib.parse
 from io import BytesIO
 from typing import List, Dict, Any, Optional
@@ -8,23 +9,21 @@ from typing import List, Dict, Any, Optional
 import httpx
 from docx import Document
 from docx.shared import Pt, Inches, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 from pptx import Presentation
 from pptx.util import Inches as PptxInches, Pt as PptxPt
 from pptx.dml.color import RGBColor as PptxRGBColor
-from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-TEMP_DIR = os.path.join(os.path.dirname(__file__), "generated_files")
-os.makedirs(TEMP_DIR, exist_ok=True)
+STATIC_GEN_DIR = os.path.join(os.path.dirname(__file__), "static", "generated")
+os.makedirs(STATIC_GEN_DIR, exist_ok=True)
 
 # Register Arial or system font for Cyrillic PDF support
 CYRILLIC_FONT = "Helvetica"
 try:
-    # Try finding Arial on Windows
     win_font = "C:\\Windows\\Fonts\\arial.ttf"
     if os.path.exists(win_font):
         pdfmetrics.registerFont(TTFont("Arial", win_font))
@@ -32,13 +31,39 @@ try:
 except Exception:
     pass
 
-# --- 1. Image Generation (Flux / Pollinations with Gemini prompt enhancement) ---
-async def generate_image_bytes(user_prompt: str, gemini_caller) -> tuple[bytes, str]:
+# --- Smart Intent Detection ---
+async def detect_intent(text: str, gemini_caller) -> Dict[str, Any]:
     """
-    Enhances prompt using Gemini, then fetches high-res image.
+    Detects if the user wants an image, presentation, docx, pdf, or normal chat.
+    Uses regex for fast detection, falls back to lightweight AI parsing.
     """
+    lower = text.lower().strip()
+    
+    # 1. Image generation regex
+    img_match = re.search(r"^(?:нарисуй|сгенерируй (?:фото|картинку|арт)|создай (?:фото|картинку)|картинка|нарисуй мне|draw|generate image)\s+(.+)", lower, re.IGNORECASE)
+    if img_match:
+        return {"type": "image", "topic": img_match.group(1).strip()}
+        
+    # 2. PowerPoint Presentation regex
+    pptx_match = re.search(r"(?:создай|сделай|подготовь|сгенерируй)?\s*(?:презентаци[юи]|слайды|презу|powerpoint|pptx)\s*(?:на тему|про|по)?\s+(.+)", lower, re.IGNORECASE)
+    if pptx_match:
+        return {"type": "pptx", "topic": pptx_match.group(1).strip()}
+        
+    # 3. Word Document regex
+    docx_match = re.search(r"(?:создай|сделай|подготовь|сгенерируй)?\s*(?:документ|отч[её]т)?\s*(?:в ворде|в word|docx|word)\s*(?:на тему|про|по)?\s+(.+)", lower, re.IGNORECASE)
+    if docx_match:
+        return {"type": "docx", "topic": docx_match.group(1).strip()}
+        
+    # 4. PDF regex
+    pdf_match = re.search(r"(?:создай|сделай|подготовь|сгенерируй)?\s*(?:документ|отч[её]т)?\s*(?:в пдф|в pdf|pdf|пдф)\s*(?:на тему|про|по)?\s+(.+)", lower, re.IGNORECASE)
+    if pdf_match:
+        return {"type": "pdf", "topic": pdf_match.group(1).strip()}
+        
+    return {"type": "chat", "topic": text}
+
+# --- 1. Image Generation ---
+async def generate_image(user_prompt: str, gemini_caller) -> Dict[str, Any]:
     try:
-        # Prompt enhancement
         enhanced = await gemini_caller(
             user_id=0,
             user_message=f"Translate and expand this into a detailed English prompt for an image generator (Flux/SDXL). Output ONLY the English prompt, nothing else: {user_prompt}",
@@ -51,40 +76,38 @@ async def generate_image_bytes(user_prompt: str, gemini_caller) -> tuple[bytes, 
     encoded = urllib.parse.quote(clean_prompt)
     url = f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=1024&nologo=true&seed={abs(hash(clean_prompt)) % 100000}"
     
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=35.0) as client:
         resp = await client.get(url)
         if resp.status_code == 200:
-            return resp.content, clean_prompt
-        raise Exception(f"Image generation failed with HTTP {resp.status_code}")
+            filename = f"img_{uuid.uuid4().hex[:8]}.jpg"
+            filepath = os.path.join(STATIC_GEN_DIR, filename)
+            with open(filepath, "wb") as f:
+                f.write(resp.content)
+            return {
+                "filepath": filepath,
+                "url": f"/static/generated/{filename}",
+                "filename": filename,
+                "bytes": resp.content,
+                "prompt": clean_prompt
+            }
+        raise Exception(f"Ошибка загрузки фото ({resp.status_code})")
 
 # --- 2. DOCX Word Document Generation ---
-async def generate_docx_file(topic: str, gemini_caller) -> str:
-    """
-    Generates a structured Word document (.docx) using Gemini.
-    """
+async def generate_docx(topic: str, gemini_caller) -> Dict[str, Any]:
     prompt = (
-        f"Напиши подробный, профессиональный структурированный отчёт/документ на тему: '{topic}'.\n"
-        "Формат ответа:\n"
-        "Раздели документ на чёткие секции. Заголовки пиши как '## Заголовок', "
-        "подзаголовки как '### Подзаголовок', списки через '-', текст абзацами. "
-        "Сделай документ качественным, развёрнутым и полезным."
+        f"Напиши подробный структурированный отчёт на тему: '{topic}'.\n"
+        "Раздели документ на секции. Заголовки пиши как '## Заголовок', "
+        "подзаголовки как '### Подзаголовок', списки через '-', текст абзацами."
     )
     
-    content = await gemini_caller(
-        user_id=0,
-        user_message=prompt,
-        model_name="gemini-3.8-flash"
-    )
+    content = await gemini_caller(user_id=0, user_message=prompt, model_name="gemini-3.8-flash")
     
     doc = Document()
-    
-    # Title
     title = doc.add_heading(level=0)
     title_run = title.add_run(topic.title())
     title_run.font.color.rgb = RGBColor(0x2A, 0x2A, 0x72)
     title_run.font.bold = True
     
-    # Body parser
     for line in content.split("\n"):
         line = line.strip()
         if not line:
@@ -102,29 +125,22 @@ async def generate_docx_file(topic: str, gemini_caller) -> str:
         else:
             doc.add_paragraph(line)
             
-    filename = f"report_{abs(hash(topic)) % 100000}.docx"
-    filepath = os.path.join(TEMP_DIR, filename)
+    filename = f"report_{uuid.uuid4().hex[:8]}.docx"
+    filepath = os.path.join(STATIC_GEN_DIR, filename)
     doc.save(filepath)
-    return filepath
+    return {
+        "filepath": filepath,
+        "url": f"/static/generated/{filename}",
+        "filename": filename
+    }
 
 # --- 3. PDF Document Generation ---
-async def generate_pdf_file(topic: str, gemini_caller) -> str:
-    """
-    Generates a PDF document using ReportLab and Gemini.
-    """
-    prompt = (
-        f"Напиши структурированный отчёт на тему: '{topic}'. "
-        "Включи введение, 3-4 ключевых раздела с выводами и заключение. Пиши обычным текстом с заголовками."
-    )
+async def generate_pdf(topic: str, gemini_caller) -> Dict[str, Any]:
+    prompt = f"Напиши структурированный отчёт на тему: '{topic}'. Включи введение, ключевые разделы с выводами и заключение."
+    content = await gemini_caller(user_id=0, user_message=prompt, model_name="gemini-3.8-flash")
     
-    content = await gemini_caller(
-        user_id=0,
-        user_message=prompt,
-        model_name="gemini-3.8-flash"
-    )
-    
-    filename = f"document_{abs(hash(topic)) % 100000}.pdf"
-    filepath = os.path.join(TEMP_DIR, filename)
+    filename = f"document_{uuid.uuid4().hex[:8]}.pdf"
+    filepath = os.path.join(STATIC_GEN_DIR, filename)
     
     doc = SimpleDocTemplate(filepath, pagesize=A4, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
     styles = getSampleStyleSheet()
@@ -138,7 +154,6 @@ async def generate_pdf_file(topic: str, gemini_caller) -> str:
         textColor='#1a1a4b',
         spaceAfter=14
     )
-    
     heading_style = ParagraphStyle(
         'DocHeading',
         parent=styles['Heading2'],
@@ -149,7 +164,6 @@ async def generate_pdf_file(topic: str, gemini_caller) -> str:
         spaceBefore=10,
         spaceAfter=6
     )
-    
     body_style = ParagraphStyle(
         'DocBody',
         parent=styles['BodyText'],
@@ -159,45 +173,37 @@ async def generate_pdf_file(topic: str, gemini_caller) -> str:
         spaceAfter=6
     )
     
-    story = []
-    story.append(Paragraph(topic.title(), title_style))
-    story.append(Spacer(1, 12))
-    
+    story = [Paragraph(topic.title(), title_style), Spacer(1, 12)]
     for line in content.split("\n"):
         line = line.strip()
         if not line:
             continue
         line_clean = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         if line.startswith("#"):
-            text = re.sub(r"^#+\s*", "", line_clean)
-            story.append(Paragraph(text, heading_style))
+            story.append(Paragraph(re.sub(r"^#+\s*", "", line_clean), heading_style))
         else:
             story.append(Paragraph(line_clean, body_style))
             
     doc.build(story)
-    return filepath
+    return {
+        "filepath": filepath,
+        "url": f"/static/generated/{filename}",
+        "filename": filename
+    }
 
-# --- 4. PPTX PowerPoint Presentation Generation ---
-async def generate_pptx_file(topic: str, gemini_caller) -> str:
-    """
-    Generates a PowerPoint presentation (.pptx) with slides from Gemini JSON structure.
-    """
+# --- 4. PPTX Presentation Generation ---
+async def generate_pptx(topic: str, gemini_caller) -> Dict[str, Any]:
     prompt = (
         f"Создай презентацию на тему: '{topic}'.\n"
-        "Сформируй ровно 5 слайдов в формате чистого JSON списка без лишних слов:\n"
+        "Сформируй ровно 5 слайдов в формате строго валидного JSON списка:\n"
         "[\n"
         "  {\"title\": \"Заголовок слайда 1\", \"bullets\": [\"Пункт 1\", \"Пункт 2\", \"Пункт 3\"]},\n"
         "  {\"title\": \"Заголовок слайда 2\", \"bullets\": [\"Пункт 1\", \"Пункт 2\", \"Пункт 3\"]}\n"
         "]"
     )
     
-    json_text = await gemini_caller(
-        user_id=0,
-        user_message=prompt,
-        model_name="gemini-3.8-flash"
-    )
+    json_text = await gemini_caller(user_id=0, user_message=prompt, model_name="gemini-3.8-flash")
     
-    # Extract JSON array
     slides_data = []
     try:
         match = re.search(r"\[[\s\S]*\]", json_text)
@@ -208,27 +214,23 @@ async def generate_pptx_file(topic: str, gemini_caller) -> str:
         
     if not slides_data:
         slides_data = [
-            {"title": topic.title(), "bullets": ["Введение в тему", "Ключевые аспекты", "Практическое применение"]},
-            {"title": "Основные факты", "bullets": ["Фактор 1", "Фактор 2", "Фактор 3"]},
+            {"title": topic.title(), "bullets": ["Введение в тему", "Ключевые факты", "Практическое применение"]},
+            {"title": "Основные идеи", "bullets": ["Пункт 1", "Пункт 2", "Пункт 3"]},
             {"title": "Заключение", "bullets": ["Итоги", "Выводы", "Вопросы"]}
         ]
         
     prs = Presentation()
     prs.slide_width = PptxInches(13.333)
     prs.slide_height = PptxInches(7.5)
-    
     blank_layout = prs.slide_layouts[6]
     
     for i, slide_info in enumerate(slides_data):
         slide = prs.slides.add_slide(blank_layout)
-        
-        # Slide Background (Modern dark slate / navy)
-        background = slide.background
-        fill = background.fill
+        fill = slide.background.fill
         fill.solid()
         fill.fore_color.rgb = PptxRGBColor(0x16, 0x1B, 0x2E)
         
-        # Title box
+        # Title
         txBox = slide.shapes.add_textbox(PptxInches(1.0), PptxInches(0.8), PptxInches(11.3), PptxInches(1.2))
         tf = txBox.text_frame
         p = tf.paragraphs[0]
@@ -237,12 +239,11 @@ async def generate_pptx_file(topic: str, gemini_caller) -> str:
         p.font.bold = True
         p.font.color.rgb = PptxRGBColor(0x6C, 0x63, 0xFF)
         
-        # Bullets box
+        # Bullets
         bullets = slide_info.get("bullets", [])
         txBox2 = slide.shapes.add_textbox(PptxInches(1.0), PptxInches(2.3), PptxInches(11.3), PptxInches(4.5))
         tf2 = txBox2.text_frame
         tf2.word_wrap = True
-        
         for j, bullet in enumerate(bullets):
             p2 = tf2.add_paragraph() if j > 0 else tf2.paragraphs[0]
             p2.text = f"•  {bullet}"
@@ -250,7 +251,11 @@ async def generate_pptx_file(topic: str, gemini_caller) -> str:
             p2.font.color.rgb = PptxRGBColor(0xE0, 0xE0, 0xEE)
             p2.space_after = PptxPt(16)
             
-    filename = f"presentation_{abs(hash(topic)) % 100000}.pptx"
-    filepath = os.path.join(TEMP_DIR, filename)
+    filename = f"presentation_{uuid.uuid4().hex[:8]}.pptx"
+    filepath = os.path.join(STATIC_GEN_DIR, filename)
     prs.save(filepath)
-    return filepath
+    return {
+        "filepath": filepath,
+        "url": f"/static/generated/{filename}",
+        "filename": filename
+    }
