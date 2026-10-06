@@ -36,8 +36,10 @@ load_dotenv()
 # --- Config ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-WEBAPP_URL = os.getenv("WEBAPP_URL", "http://localhost:8080")
-DEFAULT_MODEL = "gemini-3.8-flash"
+# Support Render.com auto-assigned external URL or .env
+WEBAPP_URL = os.getenv("RENDER_EXTERNAL_URL") or os.getenv("WEBAPP_URL", "http://localhost:8080")
+DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+PORT = int(os.getenv("PORT", "8080"))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("gemini_app")
@@ -551,4 +553,4 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=False)
+    uvicorn.run("main:app", host="0.0.0.0", port=PORT, reload=False)
