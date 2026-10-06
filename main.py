@@ -21,9 +21,12 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     WebAppInfo,
     MenuButtonWebApp,
+    BufferedInputFile,
+    FSInputFile
 )
 
 import db
+import generators
 
 load_dotenv()
 
@@ -138,8 +141,16 @@ def get_webapp_keyboard():
 @dp.message(CommandStart())
 async def handle_start(message: types.Message):
     await message.answer(
-        "👋 **Добро пожаловать в Gemini AI!**\n\n"
-        "✨ Нажмите кнопку **«Открыть»** слева от поля ввода текста или кнопку ниже:",
+        "👋 **Добро пожаловать в Gemini AI SuperBot!**\n\n"
+        "✨ **Доступные команды:**\n"
+        "• 📱 Кнопка **«Открыть»** — запуск Mini App чата\n"
+        "• 🎨 `/image <запрос>` — генерация изображений (Flux / Nano)\n"
+        "• 📄 `/docx <тема>` — создание Word отчёта (.docx)\n"
+        "• 📑 `/pdf <тема>` — создание документа в PDF (.pdf)\n"
+        "• 📊 `/pptx <тема>` — генерация PowerPoint презентации (.pptx)\n"
+        "• 📸 Отправка фото — анализ и распознавание\n"
+        "• 🎤 Голосовые — транскрибация и ответы голосом\n"
+        "• 🧹 `/clear` — очистка истории",
         parse_mode="Markdown",
         reply_markup=get_webapp_keyboard()
     )
@@ -150,6 +161,103 @@ async def handle_clear(message: types.Message):
     await db.clear_history(user_id)
     await message.answer("🧹 История диалога успешно очищена!")
 
+# 1. Image Generation Handler
+@dp.message(Command("image", "img"))
+async def handle_image_cmd(message: types.Message):
+    prompt = message.text.split(maxsplit=1)
+    if len(prompt) < 2 or not prompt[1].strip():
+        await message.answer("💡 Напишите запрос после команды, например:\n`/image неоновый киберпанк город с летающими машинами`", parse_mode="Markdown")
+        return
+        
+    user_prompt = prompt[1].strip()
+    status_msg = await message.answer("🎨 Генерирую изображение по вашему запросу...")
+    
+    try:
+        img_bytes, enhanced_prompt = await generators.generate_image_bytes(user_prompt, call_gemini_api)
+        input_file = BufferedInputFile(img_bytes, filename="generated.jpg")
+        await message.answer_photo(
+            photo=input_file,
+            caption=f"✨ **Запрос:** {user_prompt}\n🔍 *Промт:* `{enhanced_prompt[:150]}...`",
+            parse_mode="Markdown"
+        )
+        await status_msg.delete()
+    except Exception as e:
+        logger.error(f"Image generation error: {e}")
+        await status_msg.edit_text(f"⚠️ Ошибка генерации фото: {e}")
+
+# 2. DOCX Word Report Handler
+@dp.message(Command("docx"))
+async def handle_docx_cmd(message: types.Message):
+    topic = message.text.split(maxsplit=1)
+    if len(topic) < 2 or not topic[1].strip():
+        await message.answer("💡 Укажите тему для Word документа, например:\n`/docx Бизнес-план для кофейни`", parse_mode="Markdown")
+        return
+        
+    user_topic = topic[1].strip()
+    status_msg = await message.answer("📄 Составляю и верстаю Word документ (.docx)...")
+    
+    try:
+        file_path = await generators.generate_docx_file(user_topic, call_gemini_api)
+        input_file = FSInputFile(file_path, filename=f"{user_topic[:30]}.docx")
+        await message.answer_document(
+            document=input_file,
+            caption=f"✅ Готово! Ваш документ Word на тему:\n**{user_topic}**",
+            parse_mode="Markdown"
+        )
+        await status_msg.delete()
+    except Exception as e:
+        logger.error(f"DOCX error: {e}")
+        await status_msg.edit_text(f"⚠️ Ошибка при создании DOCX: {e}")
+
+# 3. PDF Document Handler
+@dp.message(Command("pdf"))
+async def handle_pdf_cmd(message: types.Message):
+    topic = message.text.split(maxsplit=1)
+    if len(topic) < 2 or not topic[1].strip():
+        await message.answer("💡 Укажите тему для PDF, например:\n`/pdf Анализ рынка криптовалют`", parse_mode="Markdown")
+        return
+        
+    user_topic = topic[1].strip()
+    status_msg = await message.answer("📑 Генерирую PDF документ...")
+    
+    try:
+        file_path = await generators.generate_pdf_file(user_topic, call_gemini_api)
+        input_file = FSInputFile(file_path, filename=f"{user_topic[:30]}.pdf")
+        await message.answer_document(
+            document=input_file,
+            caption=f"✅ Готово! Ваш PDF документ на тему:\n**{user_topic}**",
+            parse_mode="Markdown"
+        )
+        await status_msg.delete()
+    except Exception as e:
+        logger.error(f"PDF error: {e}")
+        await status_msg.edit_text(f"⚠️ Ошибка при создании PDF: {e}")
+
+# 4. PPTX PowerPoint Presentation Handler
+@dp.message(Command("pptx"))
+async def handle_pptx_cmd(message: types.Message):
+    topic = message.text.split(maxsplit=1)
+    if len(topic) < 2 or not topic[1].strip():
+        await message.answer("💡 Укажите тему презентации, например:\n`/pptx Введение в машинное обучение`", parse_mode="Markdown")
+        return
+        
+    user_topic = topic[1].strip()
+    status_msg = await message.answer("📊 Генерирую слайды презентации PowerPoint (.pptx)...")
+    
+    try:
+        file_path = await generators.generate_pptx_file(user_topic, call_gemini_api)
+        input_file = FSInputFile(file_path, filename=f"{user_topic[:30]}.pptx")
+        await message.answer_document(
+            document=input_file,
+            caption=f"✅ Готово! Презентация PowerPoint на тему:\n**{user_topic}**",
+            parse_mode="Markdown"
+        )
+        await status_msg.delete()
+    except Exception as e:
+        logger.error(f"PPTX error: {e}")
+        await status_msg.edit_text(f"⚠️ Ошибка при создании презентации: {e}")
+
+# Photo & Voice handlers
 @dp.message(F.photo)
 async def handle_photo(message: types.Message):
     user_id = message.from_user.id if message.from_user else 0
@@ -204,6 +312,21 @@ async def handle_direct_message(message: types.Message):
     user_id = message.from_user.id if message.from_user else 0
     user_text = message.text or ""
     
+    # Check if user asked to draw something in plain text
+    lower_text = user_text.lower().strip()
+    if lower_text.startswith("нарисуй ") or lower_text.startswith("сгенерируй фото ") or lower_text.startswith("картинка "):
+        clean_p = re.sub(r"^(нарисуй|сгенерируй фото|картинка)\s*", "", user_text, flags=re.IGNORECASE)
+        status_msg = await message.answer("🎨 Рисую изображение...")
+        try:
+            img_bytes, _ = await generators.generate_image_bytes(clean_p, call_gemini_api)
+            input_file = BufferedInputFile(img_bytes, filename="art.jpg")
+            await message.answer_photo(photo=input_file, caption=f"✨ **Результат:** {clean_p}")
+            await status_msg.delete()
+            return
+        except Exception as e:
+            await status_msg.edit_text(f"⚠️ Ошибка рисования: {e}")
+            return
+            
     await message.bot.send_chat_action(chat_id=message.chat.id, action="typing")
     
     try:
@@ -221,14 +344,13 @@ async def start_bot_polling():
     if not target_url.endswith("/app"):
         target_url = f"{target_url.rstrip('/')}/app"
     try:
-        # Sets the native bottom-left 'Открыть' button in chat
         await bot.set_chat_menu_button(
             menu_button=MenuButtonWebApp(
                 text="Открыть",
                 web_app=WebAppInfo(url=target_url)
             )
         )
-        logger.info(f"Menu button set to 'Открыть': {target_url}")
+        logger.info(f"Menu button set: {target_url}")
     except Exception as e:
         logger.warning(f"Could not update menu button: {e}")
         

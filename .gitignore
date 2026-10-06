@@ -26,5 +26,6 @@ ENV/
 .vscode/
 .idea/
 
-# Logs
+# Logs & Generated Files
 *.log
+generated_files/
