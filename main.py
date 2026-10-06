@@ -1,5 +1,6 @@
 import os
 import sys
+import uuid
 import base64
 import logging
 import asyncio
@@ -8,8 +9,10 @@ from typing import List, Dict, Any, Optional
 from contextlib import asynccontextmanager
 
 import httpx
+import pypdf
+import docx
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
@@ -39,6 +42,9 @@ DEFAULT_MODEL = "gemini-3.8-flash"
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("gemini_app")
 
+UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "static", "uploads")
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+
 SUPPORTED_MODELS = {
     "gemini-3.8-flash": "⚡ Gemini 3.8 Flash (Быстрый)",
     "gemini-3.8-flash-lite": "🚀 Gemini Flash Lite (Ультра-скорость)",
@@ -51,12 +57,15 @@ async def call_gemini_api(
     user_message: str = "",
     model_name: str = DEFAULT_MODEL,
     system_prompt: str = "",
-    inline_media: Optional[Dict[str, str]] = None
+    inline_media: Optional[Dict[str, str]] = None,
+    save_to_db: bool = True,
+    msg_type: str = "chat",
+    media_url: str = ""
 ) -> str:
     if model_name not in SUPPORTED_MODELS:
         model_name = DEFAULT_MODEL
 
-    history = await db.get_history(user_id=user_id, limit=20)
+    history = await db.get_history_for_gemini(user_id=user_id, limit=20)
     
     current_parts = []
     if user_message:
@@ -112,9 +121,10 @@ async def call_gemini_api(
             if "text" in p:
                 answer_text += p["text"]
                 
-        prompt_summary = user_message if user_message else "[Медиафайл]"
-        await db.add_message(user_id=user_id, role="user", content=prompt_summary)
-        await db.add_message(user_id=user_id, role="model", content=answer_text)
+        if save_to_db and user_id != 0:
+            prompt_summary = user_message if user_message else "[Файл]"
+            await db.add_message(user_id=user_id, role="user", content=prompt_summary, msg_type="chat")
+            await db.add_message(user_id=user_id, role="model", content=answer_text, msg_type=msg_type, media_url=media_url)
         
         return answer_text
 
@@ -141,15 +151,14 @@ def get_webapp_keyboard():
 @dp.message(CommandStart())
 async def handle_start(message: types.Message):
     await message.answer(
-        "👋 **Добро пожаловать в Gemini AI!**\n\n"
-        "✨ **Я понимаю естественную речь без слеш-команд:**\n"
-        "• *«Нарисуй киберпанк город»* ➔ сгенерирую фото\n"
-        "• *«Сделай презентацию про квантовую физику»* ➔ создам PowerPoint (.pptx)\n"
-        "• *«Подготовь отчёт в ворде по рынку AI»* ➔ соберу документ Word (.docx)\n"
-        "• *«Сделай PDF документ с резюме»* ➔ сформирую PDF (.pdf)\n"
-        "• 📸 Присылайте любые фото для анализа\n"
-        "• 🎤 Записывайте голосовые вопросы\n"
-        "• 📱 Кнопка **«Открыть»** слева — Mini App с выбором моделей!",
+        "👋 **Добро пожаловать в Gemini AI SuperBot!**\n\n"
+        "✨ **Возможности:**\n"
+        "• 📱 Кнопка **«Открыть»** слева — Mini App с историей, файлами и выбором моделей\n"
+        "• 🎨 *«Нарисуй спорткар»* ➔ создам изображение\n"
+        "• 📊 *«Сделай презентацию про космос»* ➔ сгенерирую PowerPoint (.pptx)\n"
+        "• 📄 *«Отчёт в ворде по AI»* ➔ соберу Word (.docx)\n"
+        "• 📑 *«Сделай PDF документ»* ➔ сверстаю PDF (.pdf)\n"
+        "• 📎 Присылайте фото, документы или голосовые — я разберусь!",
         parse_mode="Markdown",
         reply_markup=get_webapp_keyboard()
     )
@@ -160,7 +169,6 @@ async def handle_clear(message: types.Message):
     await db.clear_history(user_id)
     await message.answer("🧹 История диалога успешно очищена!")
 
-# Photo & Voice handlers
 @dp.message(F.photo)
 async def handle_photo(message: types.Message):
     user_id = message.from_user.id if message.from_user else 0
@@ -186,10 +194,37 @@ async def handle_photo(message: types.Message):
         logger.error(f"Photo analysis error: {e}")
         await status_msg.edit_text(f"⚠️ Ошибка при анализе фото: {e}")
 
+@dp.message(F.document)
+async def handle_document(message: types.Message):
+    user_id = message.from_user.id if message.from_user else 0
+    doc_info = message.document
+    caption = message.caption or "Проанализируй этот документ и сделай краткое резюме ключевых моментов:"
+    
+    await message.bot.send_chat_action(chat_id=message.chat.id, action="typing")
+    status_msg = await message.answer(f"📄 Читаю документ «{doc_info.file_name}»...")
+    
+    try:
+        buffer = BytesIO()
+        await message.bot.download(doc_info.file_id, destination=buffer)
+        raw_bytes = buffer.getvalue()
+        
+        # Extract text
+        extracted_text = extract_text_from_file(doc_info.file_name, raw_bytes)
+        combined_prompt = f"Пользователь прикрепил файл '{doc_info.file_name}':\n\n--- СОДЕРЖИМОЕ ФАЙЛА ---\n{extracted_text[:12000]}\n--- КОНЕЦ ФАЙЛА ---\n\nЗапрос: {caption}"
+        
+        reply = await call_gemini_api(
+            user_id=user_id,
+            user_message=combined_prompt,
+            model_name="gemini-3.8-flash"
+        )
+        await status_msg.edit_text(reply)
+    except Exception as e:
+        logger.error(f"Doc error: {e}")
+        await status_msg.edit_text(f"⚠️ Ошибка обработки документа: {e}")
+
 @dp.message(F.voice)
 async def handle_voice(message: types.Message):
     user_id = message.from_user.id if message.from_user else 0
-    
     await message.bot.send_chat_action(chat_id=message.chat.id, action="typing")
     status_msg = await message.answer("🎧 Слушаю голосовое сообщение...")
     
@@ -210,7 +245,6 @@ async def handle_voice(message: types.Message):
         logger.error(f"Voice analysis error: {e}")
         await status_msg.edit_text(f"⚠️ Ошибка при обработке голоса: {e}")
 
-# Natural language handler with Intent Detection
 @dp.message(F.text)
 async def handle_direct_message(message: types.Message):
     user_id = message.from_user.id if message.from_user else 0
@@ -220,7 +254,6 @@ async def handle_direct_message(message: types.Message):
     intent_type = intent.get("type", "chat")
     topic = intent.get("topic", user_text)
     
-    # 1. Image generation
     if intent_type == "image":
         status_msg = await message.answer("🎨 Генерирую изображение по вашему запросу...")
         try:
@@ -233,7 +266,6 @@ async def handle_direct_message(message: types.Message):
             await status_msg.edit_text(f"⚠️ Ошибка генерации фото: {e}")
             return
 
-    # 2. PowerPoint Presentation
     if intent_type == "pptx":
         status_msg = await message.answer(f"📊 Составляю презентацию PowerPoint на тему: **{topic}**...")
         try:
@@ -246,7 +278,6 @@ async def handle_direct_message(message: types.Message):
             await status_msg.edit_text(f"⚠️ Ошибка создания презентации: {e}")
             return
 
-    # 3. Word DOCX Document
     if intent_type == "docx":
         status_msg = await message.answer(f"📄 Формирую Word документ на тему: **{topic}**...")
         try:
@@ -259,7 +290,6 @@ async def handle_direct_message(message: types.Message):
             await status_msg.edit_text(f"⚠️ Ошибка создания DOCX: {e}")
             return
 
-    # 4. PDF Document
     if intent_type == "pdf":
         status_msg = await message.answer(f"📑 Верстаю PDF документ на тему: **{topic}**...")
         try:
@@ -272,7 +302,6 @@ async def handle_direct_message(message: types.Message):
             await status_msg.edit_text(f"⚠️ Ошибка создания PDF: {e}")
             return
 
-    # 5. Normal chat
     await message.bot.send_chat_action(chat_id=message.chat.id, action="typing")
     try:
         reply = await call_gemini_api(
@@ -302,6 +331,30 @@ async def start_bot_polling():
     logger.info("Starting Telegram bot polling...")
     await dp.start_polling(bot)
 
+# --- Document Text Extractor ---
+def extract_text_from_file(filename: str, content: bytes) -> str:
+    ext = filename.lower().split(".")[-1]
+    if ext == "pdf":
+        try:
+            reader = pypdf.PdfReader(BytesIO(content))
+            pages = [page.extract_text() or "" for page in reader.pages[:20]]
+            return "\n".join(pages)
+        except Exception as e:
+            return f"[Ошибка чтения PDF: {e}]"
+    elif ext == "docx":
+        try:
+            d = docx.Document(BytesIO(content))
+            return "\n".join([p.text for p in d.paragraphs if p.text])
+        except Exception as e:
+            return f"[Ошибка чтения DOCX: {e}]"
+    else:
+        for enc in ["utf-8", "cp1251", "latin-1"]:
+            try:
+                return content.decode(enc)
+            except Exception:
+                pass
+        return "[Текстовый контент]"
+
 # --- FastAPI WebApp ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -313,35 +366,126 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+class AttachedFileInfo(BaseModel):
+    filename: str
+    file_type: str  # "image" or "doc"
+    mime_type: str
+    b64_data: str = ""
+    extracted_text: str = ""
+    preview_url: str = ""
+
 class WebChatRequest(BaseModel):
     message: str
     user_id: int = 0
     model: str = DEFAULT_MODEL
     system_prompt: str = ""
+    attached_file: Optional[AttachedFileInfo] = None
 
+# 1. File Upload API for Mini App
+@app.post("/api/upload")
+async def api_upload(file: UploadFile = File(...)):
+    try:
+        content = await file.read()
+        filename = file.filename or "file"
+        content_type = file.content_type or "application/octet-stream"
+        
+        is_image = content_type.startswith("image/") or filename.lower().endswith(('.jpg', '.jpeg', '.png', '.webp', '.gif'))
+        
+        if is_image:
+            b64_data = base64.b64encode(content).decode("utf-8")
+            unique_name = f"upload_{uuid.uuid4().hex[:8]}_{filename}"
+            filepath = os.path.join(UPLOADS_DIR, unique_name)
+            with open(filepath, "wb") as f:
+                f.write(content)
+            return JSONResponse({
+                "filename": filename,
+                "file_type": "image",
+                "mime_type": content_type if content_type.startswith("image/") else "image/jpeg",
+                "b64_data": b64_data,
+                "preview_url": f"/static/uploads/{unique_name}",
+                "extracted_text": ""
+            })
+        else:
+            extracted_text = extract_text_from_file(filename, content)
+            return JSONResponse({
+                "filename": filename,
+                "file_type": "doc",
+                "mime_type": content_type,
+                "b64_data": "",
+                "preview_url": "",
+                "extracted_text": extracted_text[:15000]
+            })
+    except Exception as e:
+        logger.error(f"Upload error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# 2. History API for Mini App
+@app.get("/api/history")
+async def api_history(user_id: int = 0):
+    try:
+        history = await db.get_ui_history(user_id=user_id, limit=50)
+        return JSONResponse({"history": history})
+    except Exception as e:
+        logger.error(f"History error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# 3. Chat API with attached files and intent detection
 @app.post("/api/chat")
 async def api_chat(req: WebChatRequest):
     try:
+        # Check if an image is attached
+        if req.attached_file and req.attached_file.file_type == "image":
+            prompt = req.message or "Что изображено на этой картинке? Опиши подробно."
+            reply = await call_gemini_api(
+                user_id=req.user_id,
+                user_message=prompt,
+                model_name=req.model,
+                inline_media={"mime_type": req.attached_file.mime_type, "data": req.attached_file.b64_data}
+            )
+            return JSONResponse({"reply": reply, "type": "chat", "model": req.model})
+
+        # Check if a document is attached
+        if req.attached_file and req.attached_file.file_type == "doc":
+            prompt_text = req.message or "Проанализируй данный документ и выдели главное:"
+            combined = (
+                f"Пользователь прикрепил документ '{req.attached_file.filename}':\n\n"
+                f"--- СОДЕРЖИМОЕ ДОКУМЕНТА ---\n{req.attached_file.extracted_text}\n--- КОНЕЦ ДОКУМЕНТА ---\n\n"
+                f"Инструкция: {prompt_text}"
+            )
+            reply = await call_gemini_api(
+                user_id=req.user_id,
+                user_message=combined,
+                model_name=req.model
+            )
+            return JSONResponse({"reply": reply, "type": "chat", "model": req.model})
+
+        # Intent detection
         intent = await generators.detect_intent(req.message, call_gemini_api)
         intent_type = intent.get("type", "chat")
         topic = intent.get("topic", req.message)
         
-        # 1. Image
         if intent_type == "image":
             res = await generators.generate_image(topic, call_gemini_api)
+            msg_reply = f"✨ Сгенерировано изображение по запросу: «{topic}»"
+            if req.user_id != 0:
+                await db.add_message(req.user_id, "user", req.message)
+                await db.add_message(req.user_id, "model", msg_reply, msg_type="image", media_url=res["url"])
             return JSONResponse({
-                "reply": f"✨ Сгенерировано изображение по запросу: «{topic}»",
+                "reply": msg_reply,
                 "type": "image",
                 "media_url": res["url"],
                 "filename": res["filename"],
                 "model": req.model
             })
             
-        # 2. PPTX Presentation
         if intent_type == "pptx":
             res = await generators.generate_pptx(topic, call_gemini_api)
+            msg_reply = f"📊 Презентация PowerPoint на тему «{topic}» успешно создана!"
+            if req.user_id != 0:
+                await db.add_message(req.user_id, "user", req.message)
+                await db.add_message(req.user_id, "model", msg_reply, msg_type="file", media_url=res["url"])
             return JSONResponse({
-                "reply": f"📊 Презентация PowerPoint на тему «{topic}» успешно создана!",
+                "reply": msg_reply,
                 "type": "file",
                 "file_type": "pptx",
                 "media_url": res["url"],
@@ -349,11 +493,14 @@ async def api_chat(req: WebChatRequest):
                 "model": req.model
             })
             
-        # 3. DOCX Word
         if intent_type == "docx":
             res = await generators.generate_docx(topic, call_gemini_api)
+            msg_reply = f"📄 Документ Microsoft Word на тему «{topic}» готов!"
+            if req.user_id != 0:
+                await db.add_message(req.user_id, "user", req.message)
+                await db.add_message(req.user_id, "model", msg_reply, msg_type="file", media_url=res["url"])
             return JSONResponse({
-                "reply": f"📄 Документ Microsoft Word на тему «{topic}» готов!",
+                "reply": msg_reply,
                 "type": "file",
                 "file_type": "docx",
                 "media_url": res["url"],
@@ -361,11 +508,14 @@ async def api_chat(req: WebChatRequest):
                 "model": req.model
             })
             
-        # 4. PDF
         if intent_type == "pdf":
             res = await generators.generate_pdf(topic, call_gemini_api)
+            msg_reply = f"📑 PDF документ на тему «{topic}» готов!"
+            if req.user_id != 0:
+                await db.add_message(req.user_id, "user", req.message)
+                await db.add_message(req.user_id, "model", msg_reply, msg_type="file", media_url=res["url"])
             return JSONResponse({
-                "reply": f"📑 PDF документ на тему «{topic}» готов!",
+                "reply": msg_reply,
                 "type": "file",
                 "file_type": "pdf",
                 "media_url": res["url"],
@@ -373,7 +523,6 @@ async def api_chat(req: WebChatRequest):
                 "model": req.model
             })
             
-        # 5. Normal Chat
         reply = await call_gemini_api(
             user_id=req.user_id,
             user_message=req.message,

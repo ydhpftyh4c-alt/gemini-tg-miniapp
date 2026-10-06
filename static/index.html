@@ -40,6 +40,7 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            position: relative;
         }
 
         /* Header */
@@ -57,19 +58,27 @@
         .header-left {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
 
-        .gemini-icon {
-            width: 38px;
-            height: 38px;
-            border-radius: 12px;
-            background: var(--accent-gradient);
+        .btn-icon {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 20px;
-            box-shadow: 0 4px 12px rgba(108, 99, 255, 0.3);
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.2s;
+        }
+
+        .btn-icon:hover {
+            background: rgba(108, 99, 255, 0.2);
+            border-color: var(--accent);
         }
 
         .header-info {
@@ -79,9 +88,8 @@
         }
 
         .header-title {
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 700;
-            letter-spacing: -0.2px;
         }
 
         .model-select {
@@ -94,12 +102,6 @@
             font-weight: 500;
             outline: none;
             cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .model-select:focus {
-            border-color: var(--accent);
-            color: var(--text-primary);
         }
 
         .header-actions {
@@ -108,7 +110,7 @@
             gap: 6px;
         }
 
-        .btn-header {
+        .btn-clear {
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid var(--border);
             color: var(--text-secondary);
@@ -122,10 +124,99 @@
             transition: all 0.2s;
         }
 
-        .btn-header:hover {
-            border-color: var(--accent);
+        .btn-clear:hover {
+            color: #ff5252;
+            border-color: #ff5252;
+        }
+
+        /* Sidebar Drawer (History) */
+        .drawer-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.65);
+            z-index: 100;
+            backdrop-filter: blur(3px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .drawer-overlay.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .drawer {
+            position: fixed;
+            top: 0;
+            left: -280px;
+            width: 280px;
+            height: 100%;
+            background: #151528;
+            border-right: 1px solid var(--border);
+            z-index: 101;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s cubic-bezier(0.1, 0.9, 0.2, 1);
+            box-shadow: 4px 0 24px rgba(0,0,0,0.5);
+        }
+
+        .drawer.open {
+            transform: translateX(280px);
+        }
+
+        .drawer-header {
+            padding: 16px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .drawer-title {
+            font-size: 15px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .drawer-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .history-item {
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            font-size: 12px;
+            line-height: 1.4;
             color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.2s;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .history-item:hover {
             background: rgba(108, 99, 255, 0.15);
+            border-color: var(--accent);
+        }
+
+        .history-time {
+            font-size: 10px;
+            color: var(--text-secondary);
+            margin-bottom: 3px;
         }
 
         /* Chat area */
@@ -147,38 +238,32 @@
             align-items: center;
             justify-content: center;
             flex: 1;
-            gap: 16px;
+            gap: 14px;
             text-align: center;
             padding: 20px 10px;
         }
 
         .welcome-icon {
-            width: 72px;
-            height: 72px;
-            border-radius: 22px;
+            width: 68px;
+            height: 68px;
+            border-radius: 20px;
             background: var(--accent-gradient);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 36px;
+            font-size: 34px;
             box-shadow: 0 8px 30px rgba(108, 99, 255, 0.35);
-            animation: pulse 3s infinite ease-in-out;
-        }
-
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.05); }
         }
 
         .welcome-title {
-            font-size: 20px;
+            font-size: 19px;
             font-weight: 700;
         }
 
         .welcome-text {
             color: var(--text-secondary);
             font-size: 13px;
-            max-width: 320px;
+            max-width: 310px;
             line-height: 1.5;
         }
 
@@ -188,15 +273,15 @@
             gap: 8px;
             width: 100%;
             max-width: 340px;
-            margin-top: 10px;
+            margin-top: 8px;
         }
 
         .suggestion-chip {
             background: var(--bg-secondary);
             border: 1px solid var(--border);
             border-radius: 12px;
-            padding: 10px;
-            font-size: 12px;
+            padding: 9px;
+            font-size: 11px;
             color: var(--text-primary);
             cursor: pointer;
             text-align: left;
@@ -358,7 +443,6 @@
 
         .btn-download-file:hover {
             background: #5a50e5;
-            transform: scale(1.03);
         }
 
         /* Code Blocks & Copy Button */
@@ -411,14 +495,8 @@
             line-height: 1.45;
         }
 
-        .message-bubble p {
-            margin-bottom: 8px;
-        }
-        .message-bubble p:last-child {
-            margin-bottom: 0;
-        }
-
-        /* Inline code */
+        .message-bubble p { margin-bottom: 8px; }
+        .message-bubble p:last-child { margin-bottom: 0; }
         .message-bubble code:not(pre code) {
             background: rgba(255, 255, 255, 0.08);
             padding: 2px 5px;
@@ -454,20 +532,53 @@
 
         /* Input Container */
         .input-container {
-            padding: 10px 12px;
+            padding: 8px 12px 10px;
             background: var(--bg-secondary);
             border-top: 1px solid var(--border);
             flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        /* Attached File Preview Bar */
+        .attached-preview-bar {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 10px;
+            background: #111122;
+            border: 1px solid var(--accent);
+            border-radius: 10px;
+            font-size: 12px;
+        }
+
+        .attached-preview-info {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .btn-remove-attachment {
+            background: none;
+            border: none;
+            color: #ff5252;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 2px 6px;
         }
 
         .input-wrapper {
             display: flex;
             align-items: flex-end;
-            gap: 8px;
+            gap: 6px;
             background: var(--bg-chat);
             border: 1px solid var(--border);
             border-radius: 22px;
-            padding: 4px 6px 4px 14px;
+            padding: 4px 6px 4px 10px;
             transition: border-color 0.2s;
         }
 
@@ -475,24 +586,45 @@
             border-color: var(--accent);
         }
 
+        .btn-attach {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 17px;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        }
+
+        .btn-attach:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
         .input-wrapper textarea {
             flex: 1;
             background: none;
             border: none;
             color: var(--text-primary);
-            font-size: 15px;
+            font-size: 14px;
             font-family: inherit;
             resize: none;
             outline: none;
-            max-height: 110px;
-            min-height: 34px;
-            padding: 7px 0;
+            max-height: 100px;
+            min-height: 32px;
+            padding: 6px 0;
             line-height: 1.4;
         }
 
         .btn-send {
-            width: 36px;
-            height: 36px;
+            width: 34px;
+            height: 34px;
             border-radius: 50%;
             border: none;
             background: var(--accent);
@@ -517,8 +649,8 @@
         }
 
         .btn-send svg {
-            width: 18px;
-            height: 18px;
+            width: 17px;
+            height: 17px;
         }
 
         .toast {
@@ -531,16 +663,31 @@
             padding: 8px 16px;
             border-radius: 10px;
             font-size: 13px;
-            z-index: 100;
+            z-index: 200;
             box-shadow: 0 4px 12px rgba(0,0,0,0.4);
             animation: fadeIn 0.3s ease;
         }
     </style>
 </head>
 <body>
+    <!-- History Drawer Overlay & Drawer -->
+    <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+    <div class="drawer" id="drawer">
+        <div class="drawer-header">
+            <div class="drawer-title">📜 История диалогов</div>
+            <button class="btn-icon" style="width:28px;height:28px;" onclick="closeDrawer()">✕</button>
+        </div>
+        <div class="drawer-content" id="drawerContent">
+            <div style="color:var(--text-secondary);font-size:12px;text-align:center;padding:20px;">
+                Загрузка истории...
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Header -->
     <div class="header">
         <div class="header-left">
-            <div class="gemini-icon">✦</div>
+            <button class="btn-icon" onclick="openDrawer()" title="История чатов">☰</button>
             <div class="header-info">
                 <div class="header-title">Gemini AI</div>
                 <select id="modelSelect" class="model-select" onchange="onModelChange()">
@@ -551,33 +698,47 @@
             </div>
         </div>
         <div class="header-actions">
-            <button class="btn-header" onclick="clearChat()">
+            <button class="btn-clear" onclick="clearChat()">
                 <span>🗑</span> Очистить
             </button>
         </div>
     </div>
 
+    <!-- Chat Messages -->
     <div class="chat-container" id="chatContainer">
         <div class="welcome-screen" id="welcomeScreen">
             <div class="welcome-icon">✦</div>
             <div class="welcome-title">Чем помочь сегодня?</div>
             <div class="welcome-text">
-                Пишите обычным языком: я отвечаю на вопросы, генерирую фото, презентации и документы!
+                Прикрепляйте файлы через 📎, просите сгенерировать фото, презентации или документы!
             </div>
             <div class="suggestions">
                 <div class="suggestion-chip" onclick="useSuggestion(this)">🎨 Нарисуй неоновый спорткар</div>
                 <div class="suggestion-chip" onclick="useSuggestion(this)">📊 Сделай презентацию про космос</div>
                 <div class="suggestion-chip" onclick="useSuggestion(this)">📄 Отчёт в ворде по трендам AI</div>
-                <div class="suggestion-chip" onclick="useSuggestion(this)">🐍 Напиши скрипт на Python</div>
+                <div class="suggestion-chip" onclick="useSuggestion(this)">📎 Проанализируй прикрепленный файл</div>
             </div>
         </div>
     </div>
 
+    <!-- Input Area -->
     <div class="input-container">
+        <!-- Attached File Preview -->
+        <div class="attached-preview-bar" id="attachedBar">
+            <div class="attached-preview-info" id="attachedInfo">
+                <span>📎</span> <span id="attachedFileName">file.pdf</span>
+            </div>
+            <button class="btn-remove-attachment" onclick="removeAttachment()">✕</button>
+        </div>
+
         <div class="input-wrapper">
+            <!-- Hidden file input -->
+            <input type="file" id="fileInput" style="display:none" onchange="handleFileSelected(event)" accept="image/*,.pdf,.docx,.txt,.py,.js,.json,.csv,.md">
+            
+            <button class="btn-attach" onclick="triggerFileInput()" title="Прикрепить файл или фото">📎</button>
             <textarea
                 id="messageInput"
-                placeholder="Спросите или попросите нарисовать..."
+                placeholder="Спросите или прикрепите файл..."
                 rows="1"
                 onkeydown="handleKeyDown(event)"
                 oninput="autoResize(this)"
@@ -606,8 +767,15 @@
         const sendBtn = document.getElementById('sendBtn');
         const welcomeScreen = document.getElementById('welcomeScreen');
         const modelSelect = document.getElementById('modelSelect');
+        const fileInput = document.getElementById('fileInput');
+        const attachedBar = document.getElementById('attachedBar');
+        const attachedFileName = document.getElementById('attachedFileName');
+        const drawer = document.getElementById('drawer');
+        const drawerOverlay = document.getElementById('drawerOverlay');
+        const drawerContent = document.getElementById('drawerContent');
 
         let isLoading = false;
+        let currentAttachment = null;
 
         function haptic(type = 'light') {
             try {
@@ -621,6 +789,106 @@
             haptic('selection');
         }
 
+        // Drawer
+        function openDrawer() {
+            haptic('light');
+            loadHistoryDrawer();
+            drawer.classList.add('open');
+            drawerOverlay.classList.add('open');
+        }
+
+        function closeDrawer() {
+            drawer.classList.remove('open');
+            drawerOverlay.classList.remove('open');
+        }
+
+        async function loadHistoryDrawer() {
+            try {
+                const res = await fetch(`/api/history?user_id=${userId}`);
+                const data = await res.json();
+                if (!data.history || data.history.length === 0) {
+                    drawerContent.innerHTML = '<div style="color:var(--text-secondary);font-size:12px;text-align:center;padding:20px;">История пуста</div>';
+                    return;
+                }
+                drawerContent.innerHTML = '';
+                // Group or list user queries
+                data.history.forEach(item => {
+                    if (item.role === 'user') {
+                        const el = document.createElement('div');
+                        el.className = 'history-item';
+                        const timeStr = item.created_at ? new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+                        el.innerHTML = `
+                            <div class="history-time">👤 ${timeStr}</div>
+                            <div>${item.content}</div>
+                        `;
+                        el.onclick = () => {
+                            closeDrawer();
+                            messageInput.value = item.content;
+                            messageInput.focus();
+                        };
+                        drawerContent.appendChild(el);
+                    }
+                });
+            } catch (e) {
+                drawerContent.innerHTML = '<div style="color:#ff5252;font-size:12px;padding:20px;">Ошибка загрузки</div>';
+            }
+        }
+
+        // Restore chat on initial load
+        async function restoreChatHistory() {
+            try {
+                const res = await fetch(`/api/history?user_id=${userId}`);
+                const data = await res.json();
+                if (data.history && data.history.length > 0) {
+                    if (welcomeScreen) welcomeScreen.remove();
+                    data.history.forEach(item => {
+                        const payload = item.media_url ? { type: item.type, media_url: item.media_url } : null;
+                        addMessage(item.content, item.role === 'user' ? 'user' : 'bot', payload, false);
+                    });
+                    scrollToBottom();
+                }
+            } catch (e) {}
+        }
+
+        // File Attachment
+        function triggerFileInput() {
+            haptic('light');
+            fileInput.click();
+        }
+
+        async function handleFileSelected(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            haptic('medium');
+            attachedBar.style.display = 'flex';
+            attachedFileName.textContent = `Загрузка: ${file.name}...`;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const res = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!res.ok) throw new Error('Ошибка загрузки файла');
+                const data = await res.json();
+                currentAttachment = data;
+                attachedFileName.textContent = `${data.file_type === 'image' ? '🖼️' : '📄'} ${data.filename}`;
+            } catch (err) {
+                showToast(err.message);
+                removeAttachment();
+            }
+        }
+
+        function removeAttachment() {
+            currentAttachment = null;
+            fileInput.value = '';
+            attachedBar.style.display = 'none';
+        }
+
+        // Format Markdown
         function formatMarkdown(text) {
             let escaped = text
                 .replace(/&/g, '&amp;')
@@ -667,20 +935,19 @@
             if (codeEl) {
                 navigator.clipboard.writeText(codeEl.innerText).then(() => {
                     btn.innerHTML = '✅ Скопировано!';
-                    setTimeout(() => {
-                        btn.innerHTML = '📋 Копировать';
-                    }, 2000);
+                    setTimeout(() => { btn.innerHTML = '📋 Копировать'; }, 2000);
                 });
             }
         }
 
-        function addMessage(text, role, payload = null) {
+        function addMessage(text, role, payload = null, animate = true) {
             if (welcomeScreen && welcomeScreen.parentNode) {
                 welcomeScreen.remove();
             }
 
             const msgDiv = document.createElement('div');
             msgDiv.className = `message ${role}`;
+            if (!animate) msgDiv.style.animation = 'none';
 
             const avatar = document.createElement('div');
             avatar.className = 'message-avatar';
@@ -692,7 +959,6 @@
             if (role === 'bot') {
                 bubble.innerHTML = formatMarkdown(text);
                 
-                // If message has generated image
                 if (payload && payload.type === 'image' && payload.media_url) {
                     bubble.innerHTML += `
                         <div class="generated-image-box">
@@ -704,7 +970,6 @@
                     `;
                 }
 
-                // If message has generated document or presentation
                 if (payload && payload.type === 'file' && payload.media_url) {
                     let fileIcon = '📄';
                     if (payload.file_type === 'pptx') fileIcon = '📊';
@@ -780,7 +1045,7 @@
 
         function autoResize(el) {
             el.style.height = 'auto';
-            el.style.height = Math.min(el.scrollHeight, 110) + 'px';
+            el.style.height = Math.min(el.scrollHeight, 100) + 'px';
         }
 
         function handleKeyDown(e) {
@@ -798,7 +1063,7 @@
 
         async function sendMessage() {
             const text = messageInput.value.trim();
-            if (!text || isLoading) return;
+            if ((!text && !currentAttachment) || isLoading) return;
 
             haptic('medium');
             isLoading = true;
@@ -806,10 +1071,16 @@
             messageInput.value = '';
             messageInput.style.height = 'auto';
 
-            addMessage(text, 'user');
+            const userPromptDisplay = currentAttachment 
+                ? (text ? `📎 [${currentAttachment.filename}]\n${text}` : `📎 [${currentAttachment.filename}]`)
+                : text;
+
+            addMessage(userPromptDisplay, 'user');
             addTypingIndicator();
 
             const selectedModel = modelSelect.value;
+            const sendingAttachment = currentAttachment;
+            removeAttachment();
 
             try {
                 const res = await fetch('/api/chat', {
@@ -818,7 +1089,8 @@
                     body: JSON.stringify({
                         message: text,
                         user_id: userId,
-                        model: selectedModel
+                        model: selectedModel,
+                        attached_file: sendingAttachment
                     }),
                 });
 
@@ -857,17 +1129,19 @@
                 <div class="welcome-screen" id="welcomeScreen">
                     <div class="welcome-icon">✦</div>
                     <div class="welcome-title">Чем помочь сегодня?</div>
-                    <div class="welcome-text">Пишите обычным языком: я отвечаю на вопросы, генерирую фото, презентации и документы!</div>
+                    <div class="welcome-text">Прикрепляйте файлы через 📎, просите сгенерировать фото, презентации или документы!</div>
                     <div class="suggestions">
                         <div class="suggestion-chip" onclick="useSuggestion(this)">🎨 Нарисуй неоновый спорткар</div>
                         <div class="suggestion-chip" onclick="useSuggestion(this)">📊 Сделай презентацию про космос</div>
                         <div class="suggestion-chip" onclick="useSuggestion(this)">📄 Отчёт в ворде по трендам AI</div>
-                        <div class="suggestion-chip" onclick="useSuggestion(this)">🐍 Напиши скрипт на Python</div>
+                        <div class="suggestion-chip" onclick="useSuggestion(this)">📎 Проанализируй прикрепленный файл</div>
                     </div>
                 </div>
             `;
         }
 
+        // Init
+        restoreChatHistory();
         messageInput.focus();
     </script>
 </body>
