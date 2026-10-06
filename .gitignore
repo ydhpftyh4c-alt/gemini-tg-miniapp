@@ -1,0 +1,30 @@
+# Environment & Secrets (CRITICAL: never commit your real keys!)
+.env
+.env.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Binaries & Downloads
+cloudflared.exe
+*.exe
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
